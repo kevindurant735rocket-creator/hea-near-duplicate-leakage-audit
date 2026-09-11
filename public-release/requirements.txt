@@ -1,0 +1,9 @@
+# reproduce.py core dependencies (pinned to loosely-tested minimums)
+numpy>=1.24
+pandas>=1.5
+scipy>=1.9
+scikit-learn>=1.2
+openpyxl>=3.0
+
+# optional — only needed if you want to regenerate the figures (fig8/fig9)
+# matplotlib>=3.6

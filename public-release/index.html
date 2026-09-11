@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HEA Near-Duplicate Leakage Audit — Reproducible Research Release</title>
+<meta name="description" content="A reproducible audit showing that random train/test splits quietly inflate ML accuracy on high-entropy-alloy phase prediction — most of the inflation is near-duplicate redundancy, not data volume." />
+<link rel="canonical" href="https://7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run/" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M9 21V11l7 6 7-6v10' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='2.4' fill='%23fca5a5'/%3E%3C/svg%3E" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="HEA Leakage Audit" />
+<meta property="og:title" content="Random splits quietly inflate ML accuracy in high-entropy-alloy phase prediction" />
+<meta property="og:description" content="A reproducible audit: ~76% of the accuracy drop under an honest split is near-duplicate redundancy, not data volume. Every number regenerates with one command." />
+<meta property="og:url" content="https://7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run/" />
+<meta property="og:image" content="https://7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run/assets/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Near-duplicate leakage audit: pure redundancy gap +0.151" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Random splits quietly inflate ML accuracy in high-entropy-alloy phase prediction" />
+<meta name="twitter:description" content="~76% of the accuracy drop is near-duplicate redundancy, not data volume. Reproduce it with one command." />
+<meta name="twitter:image" content="https://7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run/assets/og.png" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"ScholarlyArticle","headline":"Near-Duplicate Leakage in ML Prediction of High-Entropy-Alloy Phase Formation","description":"A reproducible audit showing that random train/test splits inflate balanced accuracy; roughly 76% of the drop under an honest split is near-duplicate redundancy, not data volume.","author":{"@type":"Person","name":"[YOUR NAME]"},"datePublished":"2026-09-11","license":"https://opensource.org/licenses/MIT","isBasedOn":"https://doi.org/10.5281/zenodo.6403257","keywords":["high-entropy alloys","machine learning","data leakage","near-duplicate","reproducibility"]}
+</script>
+<style>
+  :root{
+    --bg:#ffffff; --surface:#f8fafc; --surface-2:#f1f5f9;
+    --ink:#0f172a; --muted:#475569; --faint:#94a3b8;
+    --border:#e2e8f0; --primary:#4f46e5; --primary-700:#4338ca;
+    --warn:#dc2626; --warn-bg:#fef2f2; --ok:#059669; --ok-bg:#ecfdf5;
+    --radius:16px; --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.06);
+    --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--primary);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;backdrop-filter:saturate(180%) blur(12px);
+    background:rgba(255,255,255,.82);border-bottom:1px solid var(--border)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .brand .mark{width:30px;height:30px}
+  .nav-links{display:flex;gap:22px;font-size:14px;color:var(--muted)}
+  .nav-links a{color:var(--muted)}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;
+    font-weight:600;font-size:14px;border:1px solid transparent;cursor:pointer}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:var(--primary-700);text-decoration:none}
+  .btn-ghost{background:transparent;border-color:var(--border);color:var(--ink)}
+  .btn-ghost:hover{background:var(--surface)}
+  /* hero */
+  .hero{background:radial-gradient(1200px 500px at 80% -10%,rgba(79,70,229,.25),transparent 60%),
+    linear-gradient(180deg,#0f172a 0%,#1e1b4b 55%,#312e81 100%);color:#e2e8f0;padding:74px 0 64px}
+  .eyebrow{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:#a5b4fc;background:rgba(165,180,252,.12);padding:6px 12px;border-radius:999px;margin-bottom:18px}
+  .hero h1{font-size:clamp(28px,4.4vw,46px);line-height:1.15;margin:0 0 18px;color:#fff;font-weight:800;letter-spacing:-.01em}
+  .hero p.lead{font-size:clamp(16px,1.8vw,19px);color:#cbd5e1;max-width:760px;margin:0 0 28px}
+  .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
+  .hero .cta .btn-ghost{color:#e2e8f0;border-color:rgba(226,232,240,.3)}
+  .hero .cta .btn-ghost:hover{background:rgba(226,232,240,.08)}
+  .hero .cta .btn-primary{background:#fff;color:#312e81}
+  .hero .cta .btn-primary:hover{background:#e0e7ff}
+  /* stat strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:40px}
+  .stat{background:rgba(255,255,255,.06);border:1px solid rgba(226,232,240,.14);border-radius:14px;padding:18px}
+  .stat .n{font-size:30px;font-weight:800;color:#fff;line-height:1}
+  .stat .n.warn{color:#fca5a5}
+  .stat .l{margin-top:8px;font-size:13px;color:#cbd5e1}
+  /* sections */
+  section{padding:60px 0}
+  section.alt{background:var(--surface)}
+  h2{font-size:clamp(22px,2.6vw,30px);margin:0 0 8px;font-weight:800;letter-spacing:-.01em}
+  .sec-eyebrow{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
+  .muted{color:var(--muted)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+  .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 10px;font-size:17px}
+  .callout{border-left:4px solid var(--warn);background:var(--warn-bg);padding:16px 18px;border-radius:0 12px 12px 0;color:#7f1d1d}
+  /* method diagram */
+  .diagram{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .diagram svg{width:100%;height:auto;display:block}
+  /* results */
+  .figure{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+  .figure img{width:100%;height:auto;border-radius:8px;display:block}
+  .figure figcaption{margin-top:10px;font-size:13px;color:var(--muted);text-align:center}
+  table{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  td .big{font-weight:800;color:var(--ink)}
+  td .warn{color:var(--warn);font-weight:800}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)}
+  .pill.warn{background:var(--warn-bg);color:var(--warn)}
+  /* code */
+  pre{background:#0f172a;color:#e2e8f0;border-radius:12px;padding:18px 20px;overflow:auto;font-size:13.5px;line-height:1.6;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  pre .c{color:#94a3b8}
+  .repro-note{display:flex;gap:12px;align-items:center;margin-top:16px;color:var(--muted);font-size:14px}
+  .repro-note .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px var(--ok-bg)}
+  /* limitations */
+  .lim{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .lim .item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .lim .item b{display:block;margin-bottom:4px}
+  /* footer */
+  footer{background:#0f172a;color:#cbd5e1;padding:46px 0 36px;font-size:14px}
+  footer a{color:#a5b4fc}
+  .foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:28px}
+  footer h4{color:#fff;font-size:14px;margin:0 0 12px;letter-spacing:.04em}
+  .disclosure{margin-top:26px;padding-top:20px;border-top:1px solid rgba(226,232,240,.14);color:#94a3b8;font-size:13px}
+  @media (max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .grid-2,.lim,.foot-grid{grid-template-columns:1fr}
+    .nav-links{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="wrap nav-in">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#4f46e5"/>
+        <path d="M9 21V11l7 6 7-6v10" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16" cy="16" r="2.4" fill="#fca5a5"/>
+      </svg>
+      <span>HEA&nbsp;Leakage&nbsp;Audit</span>
+    </div>
+    <div class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#reproduce">Reproduce</a>
+      <a href="#howto">Use it</a>
+    </div>
+    <a class="btn btn-primary" href="#reproduce">Reproduce it →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Reproducible Research Audit · CC-BY-4.0 data</span>
+    <h1>Random splits quietly inflate ML accuracy in high-entropy-alloy phase prediction.</h1>
+    <p class="lead">
+      We audited a common evaluation habit in ML-for-materials work. Under an honest,
+      near-duplicate-aware split, gradient-boosted trees lose accuracy — and
+      <strong style="color:#fca5a5">~76% of that loss is redundancy, not data volume</strong>.
+      Every number regenerates from raw data with one command.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#reproduce">Run the reproduction</a>
+      <a class="btn btn-ghost" href="#results">See the result</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="n warn">+0.151</div><div class="l">pure near-duplicate leakage gap (Δ) at τ=0.35</div></div>
+      <div class="stat"><div class="n">76%</div><div class="l">of the accuracy drop is redundancy</div></div>
+      <div class="stat"><div class="n">24%</div><div class="l">is genuine data-volume effect</div></div>
+      <div class="stat"><div class="n">≈1100</div><div class="l">alloys, public dataset (Zenodo 6403257)</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-eyebrow">The problem</div>
+    <h2>Training sets are full of near-twins the test set can "cheat" from.</h2>
+    <p class="muted" style="max-width:780px">
+      High-entropy-alloy datasets are dense with compositionally near-identical recipes
+      (several <code>AlCoCrFeNi</code>-family alloys differing only by small mole-fraction tweaks).
+      After a <em>random</em> train/test split, "hard" test alloys have near-twins in training.
+      A model that merely memorises those twins looks skilful. This is
+      <strong>near-duplicate leakage</strong> — and it is invisible under a random split.
+    </p>
+    <div class="callout" style="margin-top:22px;max-width:820px">
+      <strong>Why it matters:</strong> random splitting on compositionally dense datasets
+      (materials, chemistry, biology) <em>systematically overstates</em> model skill. This is a
+      concrete, reproducible instance of the broader ML-science reproducibility problem.
+    </div>
+  </div>
+</section>
+
+<!-- METHOD -->
+<section id="method" class="alt">
+  <div class="wrap">
+    <div class="sec-eyebrow">The method</div>
+    <h2>An exclusion-radius sweep that isolates redundancy from volume.</h2>
+    <div class="grid-2" style="margin-top:24px">
+      <div class="diagram">
+        <svg viewBox="0 0 520 280" role="img" aria-label="Exclusion-radius sweep schematic">
+          <defs>
+            <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="#475569"/>
+            </marker>
+          </defs>
+          <!-- test set -->
+          <rect x="20" y="30" width="150" height="220" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+          <text x="95" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#4338ca">Test set T</text>
+          <circle cx="60" cy="80" r="9" fill="#6366f1"/><circle cx="110" cy="120" r="9" fill="#6366f1"/>
+          <circle cx="70" cy="170" r="9" fill="#6366f1"/><circle cx="115" cy="210" r="9" fill="#6366f1"/>
+          <!-- training pool -->
+          <rect x="200" y="30" width="300" height="220" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="350" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">Training pool</text>
+          <circle cx="250" cy="80" r="9" fill="#0ea5e9"/><circle cx="300" cy="120" r="9" fill="#0ea5e9"/>
+          <circle cx="360" cy="80" r="9" fill="#0ea5e9"/><circle cx="420" cy="120" r="9" fill="#0ea5e9"/>
+          <circle cx="270" cy="170" r="9" fill="#0ea5e9"/><circle cx="340" cy="210" r="9" fill="#0ea5e9"/>
+          <circle cx="400" cy="170" r="9" fill="#0ea5e9"/><circle cx="460" cy="210" r="9" fill="#0ea5e9"/>
+          <!-- near-twin links -->
+          <path d="M115,120 L300,120" stroke="#fca5a5" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+          <path d="M70,170 L270,170" stroke="#fca5a5" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+          <text x="208" y="150" font-size="11" fill="#dc2626">near-twins (Δ &lt; τ)</text>
+          <!-- excluded branch -->
+          <path d="M500,90 C540,90 540,150 500,150" stroke="#059669" stroke-width="2.5" fill="none"/>
+          <rect x="548" y="60" width="150" height="60" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+          <text x="623" y="86" text-anchor="middle" font-size="12.5" font-weight="700" fill="#047857">excluded(τ)</text>
+          <text x="623" y="104" text-anchor="middle" font-size="10.5" fill="#065f46">twins removed</text>
+          <!-- matched branch -->
+          <path d="M500,200 C540,200 540,260 500,260" stroke="#0ea5e9" stroke-width="2.5" fill="none"/>
+          <rect x="548" y="200" width="150" height="60" rx="10" fill="#f0f9ff" stroke="#bae6fd"/>
+          <text x="623" y="226" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0369a1">matched(τ)</text>
+          <text x="623" y="244" text-anchor="middle" font-size="10.5" fill="#075985">same size, twins kept</text>
+        </svg>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Fixed test set, two size-matched training sets</h3>
+          <p class="muted" style="font-size:14.5px;margin:0">
+            For radius <code>τ</code> in mole-fraction L1 space:
+          </p>
+          <ul style="font-size:14.5px;color:var(--muted);margin:10px 0 0;padding-left:18px;line-height:1.8">
+            <li><b style="color:var(--ok)">excluded(τ)</b> — drop every training alloy within <code>τ</code> of any test alloy.</li>
+            <li><b style="color:var(--primary)">matched(τ)</b> — a random subsample of the full pool, forced to the <b>same size</b>.</li>
+          </ul>
+          <p style="font-size:14.5px;margin:12px 0 0">
+            <code>Δ(τ) = balAcc(matched) − balAcc(excluded)</code> isolates the pure redundancy contribution.
+            <code>τ = 0</code> is a built-in self-check: the two sets coincide, so <code>Δ = 0</code>.
+          </p>
+        </div>
+        <p class="muted" style="font-size:14px;margin-top:14px">
+          As <code>τ</code> grows, <em>matched</em> loses only volume while <em>excluded</em> loses volume
+          <strong>and</strong> redundancy — so the curve gap equals exactly what the near-duplicates were buying.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section id="results">
+  <div class="wrap">
+    <div class="sec-eyebrow">Headline result</div>
+    <h2>Most of the inflation is redundancy — not less data.</h2>
+    <div class="grid-2" style="margin-top:24px;align-items:stretch">
+      <figure class="figure" style="margin:0">
+        <img src="assets/fig8_exclusion_sweep.png" alt="Exclusion-radius sweep: excluded vs matched balanced accuracy vs radius tau" />
+        <figcaption>Figure 1 — Exclusion-radius sweep. The gap between the two curves is pure near-duplicate leakage.</figcaption>
+      </figure>
+      <div>
+        <table>
+          <thead><tr><th>Quantity (τ=0.35, hgb)</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>excluded(τ) bal. acc.</td><td class="big">0.685</td></tr>
+            <tr><td>size-matched control bal. acc.</td><td class="big">0.836</td></tr>
+            <tr><td><strong>Pure redundancy gap Δ</strong></td><td class="warn">+0.151</td></tr>
+            <tr><td>Total drop (τ=0 → 0.35)</td><td class="big">0.198</td></tr>
+            <tr><td>├─ data-volume share</td><td>~24%</td></tr>
+            <tr><td>└─ near-duplicate redundancy</td><td class="warn">~76%</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="font-size:14px;margin-top:14px">
+          By model: KNN <span class="pill warn">Δ +0.134</span> · logistic regression
+          <span class="pill ok">Δ +0.032 (n.s.)</span>. Leakage hits memory-prone / neighbour-based
+          models hardest — exactly what "leakage through near-twins" predicts.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REPRODUCE -->
+<section id="reproduce" class="alt">
+  <div class="wrap">
+    <div class="sec-eyebrow">Reproducibility</div>
+    <h2>One command. Deterministic. Bit-for-bit.</h2>
+    <p class="muted" style="max-width:760px">
+      All numbers regenerate with fixed random seeds (HGB <code>random_state=0</code>; matched
+      subsample <code>numpy.default_rng(1000+seed)</code>; split <code>random_state=seed</code>).
+      <code>reproduce.py</code> re-runs the sweep and asserts the headline against the committed
+      reference, exiting <code>0</code> only on a match.
+    </p>
+    <pre><span class="c"># 1. install deps</span>
+pip install -r requirements.txt
+
+<span class="c"># 2. get the data (CC-BY-4.0, ~0.5 MB) — Zenodo 6403257</span>
+<span class="c">#    place 2022-03-31-HEAs_dataset_v2.xlsx at data/heas_v2.xlsx</span>
+
+<span class="c"># 3. reproduce (~60 s)</span>
+python reproduce.py
+<span class="c"># -> HEADLINE CHECK hgb tau=0.35  ref +0.1510  repro +0.1510  dev 0.00e+00  [ok]</span>
+<span class="c"># -> RESULT: PASS</span></pre>
+    <div class="repro-note"><span class="dot"></span> Verified locally: recomputed Δ deviates from the reference by 0.00e+00 (exact).</div>
+  </div>
+</section>
+
+<!-- LIMITATIONS -->
+<section id="limitations">
+  <div class="wrap">
+    <div class="sec-eyebrow">Honest boundaries</div>
+    <h2>What this is — and is not.</h2>
+    <div class="lim" style="margin-top:22px">
+      <div class="item"><b>Scope</b>Single public dataset (Zenodo 6403257, n≈1100), one task: solid-solution classification.</div>
+      <div class="item"><b>Level</b>An undergraduate-level <em>methodological</em> audit — not a new model or theory.</div>
+      <div class="item"><b>Claim</b>Demonstrates systematic, reproducible over-estimation under random splits.</div>
+      <div class="item"><b>Not alleged</b>Does <em>not</em> claim any specific paper is wrong or fraudulent.</div>
+    </div>
+  </div>
+</section>
+
+<!-- WHO IT HELPS -->
+<section id="utility" class="alt">
+  <div class="wrap">
+    <div class="sec-eyebrow">Who this helps</div>
+    <h2>A reusable check — not just a warning.</h2>
+    <div class="lim" style="margin-top:22px">
+      <div class="item"><b>ML-for-materials researchers</b>Report Δ(τ) next to your random-split accuracy and pre-empt the "your split leaks" review comment.</div>
+      <div class="item"><b>Reviewers &amp; editors</b>A cheap, concrete robustness check to request whenever a compositionally dense dataset is involved.</div>
+      <div class="item"><b>Students</b>A self-contained, reproducible project template: public data, one command, honest limitations.</div>
+      <div class="item"><b>Any dense-composition dataset</b>Materials, chemistry, biology — swap the featurisation and the same excluded/matched protocol applies.</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW TO USE -->
+<section id="howto">
+  <div class="wrap">
+    <div class="sec-eyebrow">Use it in your work</div>
+    <h2>Three steps to measure leakage in your own split.</h2>
+    <div class="grid-2" style="margin-top:22px">
+      <div>
+        <ol style="font-size:15px;color:#1e293b;line-height:1.95;padding-left:20px;margin:0">
+          <li><b>Fix</b> one held-out test set <code>T</code>.</li>
+          <li><b>Build two size-matched training sets</b> at radius <code>τ</code>: <code>excluded(τ)</code> (drop near-twins of <code>T</code>) and <code>matched(τ)</code> (same size, twins kept).</li>
+          <li><b>Report</b> <code>Δ(τ) = balAcc(matched) − balAcc(excluded)</code> next to your headline accuracy. A large Δ means the random split is flattering you.</li>
+        </ol>
+        <div class="callout" style="margin-top:16px">
+          <strong>Checklist:</strong> ① fix the test set once &nbsp;② keep the two training sets <em>equal size</em> &nbsp;③ sweep several radii, not one.
+        </div>
+      </div>
+      <div>
+<pre><span class="c"># core of the protocol (full sweep in reproduce.py)</span>
+from scipy.spatial.distance import cdist
+d = cdist(C[train], C[test], metric="cityblock").min(1)
+for tau in [0.05, 0.12, 0.20, 0.35]:
+    excl  = train[d &gt;= tau]               <span class="c"># twins removed</span>
+    match = rng.choice(train, len(excl))  <span class="c"># same size, twins kept</span>
+    delta = balAcc(match) - balAcc(excl)  <span class="c"># pure redundancy gap</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <div class="brand" style="color:#fff;margin-bottom:12px">
+          <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect width="32" height="32" rx="8" fill="#4f46e5"/>
+            <path d="M9 21V11l7 6 7-6v10" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="16" cy="16" r="2.4" fill="#fca5a5"/>
+          </svg>
+          <span>HEA Leakage Audit</span>
+        </div>
+        <p style="margin:0;color:#94a3b8;font-size:13.5px;max-width:360px">
+          A reproducible, honest correction to a widespread evaluation habit in ML-for-materials work.
+          Significance is earned by being checkable — not by being loud.
+        </p>
+      </div>
+      <div>
+        <h4>Resources</h4>
+        <p style="margin:0;line-height:2">
+          <a href="readme.html">README</a><br>
+          <a href="article_zh.html">中文长文</a><br>
+          <a href="article_en.html">English note</a><br>
+          <a href="code.html">reproduce.py</a>
+        </p>
+      </div>
+      <div>
+        <h4>Data &amp; licence</h4>
+        <p style="margin:0;line-height:1.9;color:#94a3b8;font-size:13px">
+          Source: Zenodo 6403257<br>
+          <a href="https://doi.org/10.5281/zenodo.6403257">10.5281/zenodo.6403257</a><br>
+          Data: CC-BY-4.0 · Code: MIT
+        </p>
+      </div>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:13.5px">
+      <span style="color:#94a3b8">Share this:</span>
+      <a href="https://twitter.com/intent/tweet?text=Random%20splits%20quietly%20inflate%20ML%20accuracy%20in%20high-entropy-alloy%20phase%20prediction&url=https%3A%2F%2F7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run%2F">X / Twitter</a>
+      <a href="https://service.weibo.com/share/share.php?url=https%3A%2F%2F7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run%2F&title=%E9%9A%8F%E6%9C%BA%E5%88%92%E5%88%86%E8%AE%A9%E9%AB%98%E9%80%90%E5%90%88%E9%87%91%20ML%20%E5%87%86%E7%A1%AE%E7%8E%87%E8%99%9A%E9%AB%98%EF%BC%8C%E4%B8%83%E6%88%90%E6%98%AF%E8%BF%91%E9%87%8D%E5%A4%8D%E5%86%97%E4%BD%99">微博</a>
+      <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2F7564e6f7b2a54736889ff6b986ed445d.sg2.agentos-app.run%2F">LinkedIn</a>
+    </div>
+    <div class="disclosure">
+      <strong>AI-use disclosure:</strong> this release was AI-assisted (drafting, code scaffolding,
+      analysis support). The research design, the claims, and responsibility for correctness are human.
+      No result was fabricated — every number traces to <code>out/*.json</code>, which
+      <code>reproduce.py</code> regenerates from raw data. Author / affiliation / preprint links are
+      placeholders to be filled before publication.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it using the metadata below. Fill in author/affiliation/repo before publication."
+title: "Near-Duplicate Leakage in ML Prediction of High-Entropy-Alloy Phase Formation: a reproducible audit"
+abstract: >-
+  A random train/test split quietly inflates balanced accuracy in machine-learning
+  prediction of high-entropy-alloy (HEA) solid-solution formation. Using a public
+  dataset (Zenodo 6403257, CC-BY-4.0, n≈1100 alloys), we introduce an
+  exclusion-radius sweep that isolates near-duplicate redundancy from data-volume
+  effects. For gradient-boosted trees at exclusion radius tau=0.35, removing
+  near-duplicates drops balanced accuracy from 0.836 (size-matched control) to 0.685,
+  a pure redundancy gap of +0.151. The total accuracy drop from tau=0 to tau=0.35
+  (0.198) decomposes into ~24% data volume and ~76% near-duplicate redundancy. All
+  numbers regenerate deterministically via reproduce.py. This is an undergraduate-level
+  methodological audit, not a new model or theory; it demonstrates a systematic,
+  reproducible over-estimation under random splits and does not allege misconduct in
+  any specific paper.
+authors:
+  - family-names: "[YOUR FAMILY NAME]"
+    given-names: "[YOUR GIVEN NAME]"
+    affiliation: "[YOUR AFFILIATION]"
+    orcid: "[YOUR ORCID]"
+    email: "[YOUR EMAIL]"
+keywords:
+  - high-entropy alloys
+  - machine learning
+  - data leakage
+  - near-duplicate
+  - reproducibility
+  - materials informatics
+license: MIT
+repository-code: "[REPO URL — add after pushing to GitHub]"
+url: "[LANDING PAGE URL — add after deploy]"

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>README — HEA Leakage Audit</title>
+<style>
+:root{--ink:#0f172a;--muted:#475569;--border:#e2e8f0;--primary:#4f46e5;--surface:#f8fafc;--code:#0f172a}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);line-height:1.7;background:#fff}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+.topbar{position:sticky;top:0;background:rgba(255,255,255,.9);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--border);z-index:10}
+.tb-in{max-width:860px;margin:0 auto;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700}
+.brand .m{width:22px;height:22px;border-radius:6px;background:var(--primary);display:inline-block}
+.back{font-size:14px;color:var(--muted)}
+.doc{max-width:860px;margin:0 auto;padding:44px 24px 80px}
+.doc h1{font-size:30px;line-height:1.25;margin:0 0 18px;letter-spacing:-.01em}
+.doc h2{font-size:22px;margin:38px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+.doc h3{font-size:17px;margin:24px 0 8px}
+.doc p,.doc li{color:#1e293b}
+.doc code{background:#f1f5f9;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.9em;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+.doc pre{background:var(--code);color:#e2e8f0;border-radius:12px;padding:18px 20px;overflow:auto}
+.doc pre code{background:none;border:none;color:inherit;padding:0}
+.doc table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+.doc th,.doc td{border:1px solid var(--border);padding:9px 12px;text-align:left}
+.doc th{background:var(--surface)}
+.doc blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--primary);background:var(--surface);color:var(--muted);border-radius:0 10px 10px 0}
+.doc hr{border:none;border-top:1px solid var(--border);margin:34px 0}
+.doc img{max-width:100%}
+.dl{display:inline-block;margin:0 0 16px;font-weight:600}
+footer{border-top:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px}
+footer .f-in{max-width:860px;margin:0 auto;padding:22px 24px}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="tb-in">
+  <a class="brand" href="index.html"><span class="m"></span> HEA Leakage Audit</a>
+  <a class="back" href="index.html">&larr; 返回首页 / Back to overview</a>
+</div></div>
+<main class="doc"><h1>HEA Near-Duplicate Leakage Audit</h1>
+<blockquote>
+<p><strong>One-line significance:</strong> A <em>random</em> train/test split quietly inflates machine-learning
+accuracy on high-entropy-alloy (HEA) phase prediction — and most of that inflation is
+<strong>near-duplicate redundancy</strong>, not data volume. This repo lets anyone reproduce the number.</p>
+</blockquote>
+<p>This is an <strong>honest, undergraduate-level methodological audit</strong>. It is <strong>not</strong> a breakthrough,
+and it does <strong>not</strong> allege misconduct in any specific paper. It is a small, reproducible
+correction to a widespread habit in empirical ML-for-materials work, packaged so the community
+can verify it and (hopefully) adopt a better protocol.</p>
+<hr />
+<h2>The problem in one paragraph</h2>
+<p>Many papers use machine learning to predict whether a high-entropy alloy forms a solid
+solution. They report accuracy after a <em>random</em> split of the samples into train/test. But the
+dataset is dense with compositionally near-identical alloys (e.g. several <code>AlCoCrFeNi</code>-family
+recipes that differ only by small mole-fraction tweaks). After a random split, the test set's
+"hard" cases have near-twins in the training set. A model that merely <em>memorises</em> those twins
+looks skilful — this is <strong>near-duplicate leakage</strong>, and it is invisible under a random split.</p>
+<h2>What this repo does</h2>
+<p>We isolate the leakage with an <strong>exclusion-radius sweep (EXP-5)</strong>:</p>
+<ol>
+<li>Fix one stratified 20 % test set <code>T</code>.</li>
+<li>For an exclusion radius <code>τ</code> in mole-fraction L1 space:
+   - <strong>excluded(τ)</strong> — drop every training alloy that is within <code>τ</code> of <em>any</em> test alloy
+     (near-twins removed);
+   - <strong>matched(τ)</strong> — a random subsample of the <em>full</em> training pool, forced to the <strong>same
+     size</strong> as <code>excluded(τ)</code> (identical volume, twins kept).</li>
+<li><code>Δ(τ) = balAcc(matched) − balAcc(excluded)</code> isolates the <strong>pure redundancy</strong> contribution.
+   <code>τ = 0</code> is a built-in self-check: the two sets are identical, so <code>Δ = 0</code> by construction.</li>
+</ol>
+<p>As <code>τ</code> grows, <code>matched</code> loses only volume while <code>excluded</code> loses volume <strong>and</strong> redundancy, so
+the two curves separate by exactly the amount the near-duplicates were "buying".</p>
+<h2>Headline result (gradient-boosted trees, hgb)</h2>
+<table>
+<thead>
+<tr>
+<th>quantity</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>excluded(τ=0.35) bal. acc.</td>
+<td>0.685</td>
+</tr>
+<tr>
+<td>size-matched control bal. acc.</td>
+<td>0.836</td>
+</tr>
+<tr>
+<td><strong>pure redundancy gap Δ</strong></td>
+<td><strong>+0.151</strong></td>
+</tr>
+<tr>
+<td>total drop τ=0→0.35 (0.883→0.685)</td>
+<td>0.198</td>
+</tr>
+<tr>
+<td>├─ data-volume share</td>
+<td>~24 %</td>
+</tr>
+<tr>
+<td>└─ near-duplicate redundancy share</td>
+<td><strong>~76 %</strong></td>
+</tr>
+</tbody>
+</table>
+<p>By model: KNN shows <code>Δ = +0.134</code>; logistic regression shows only <code>Δ = +0.032</code> (not
+significant). The leakage mainly hurts <strong>memory-prone / non-linear / neighbour-based</strong> models,
+not a simple linear baseline — exactly what "leakage through near-twins" predicts.</p>
+<p>All numbers regenerate deterministically with <code>python reproduce.py</code>.</p>
+<h2>Why this matters (the significance)</h2>
+<p>Random splitting on compositionally dense datasets <strong>systematically overstates model skill</strong>.
+That is a concrete, reproducible instance of the broader ML-science reproducibility problem —
+and, unlike vague warnings, it ships with a <em>ready-to-use protocol</em> (<code>excluded</code> vs <code>matched</code>)
+the community can drop into any similar study. Significance here = <strong>an honest, checkable,
+reusable correction</strong>, not a headline claim.</p>
+<hr />
+<h2>Landing page (share-ready)</h2>
+<p>A polished, self-contained landing page lives at <code>public-release/index.html</code>. Open it
+locally, or deploy the <code>public-release/</code> folder as a static site to get a shareable URL.
+It carries the same honest framing and the one-command reproduction CTA.</p>
+<h2>Quick start</h2>
+<pre><code class="language-bash"># 1. (optional) create an environment
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. get the data (CC-BY-4.0, ~0.5 MB)
+#    Download 2022-03-31-HEAs_dataset_v2.xlsx from
+#    https://doi.org/10.5281/zenodo.6403257  and place it at  data/heas_v2.xlsx
+#    (a copy is already included if you cloned the full research/ tree)
+
+# 3. reproduce
+python public-release/reproduce.py
+# -&gt; runs the sweep (~60 s), writes out/repro_rows.csv + out/repro_sweep.json,
+#    compares to the committed reference, prints PASS.
+</code></pre>
+<p><code>reproduce.py</code> exits <code>0</code> only when the recomputed <code>Δ</code> matches the committed reference
+(<code>out/07_exclusion_sweep.json</code>) within tolerance. Determinism is guaranteed by fixed random
+seeds throughout (HGB <code>random_state=0</code>, matched subsample <code>numpy.default_rng(1000+seed)</code>,
+split <code>random_state=seed</code>).</p>
+<h2>Repository layout (this is the <code>research/</code> tree)</h2>
+<pre><code>research/
+  data/heas_v2.xlsx                 # raw dataset (CC-BY-4.0, Zenodo 6403257)
+  code/hea_common.py                # loading + featurisation
+  code/07_exclusion_sweep.py        # EXP-5 source (also imported by reproduce.py)
+  out/07_exclusion_sweep.json       # committed reference numbers
+  figures/fig8_exclusion_sweep.png  # the headline figure
+  public-release/                   # this folder: article + reproducible packaging
+</code></pre>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Scope:</strong> a single public dataset (Zenodo 6403257, n ≈ 1100 alloys), one task
+  (solid-solution vs non-solid-solution classification).</li>
+<li><strong>Level:</strong> an undergraduate-methodology audit, not a new model or theory.</li>
+<li><strong>Claim:</strong> it demonstrates a <em>systematic, reproducible over-estimation</em> under random splits;
+  it does <strong>not</strong> prove any specific paper is wrong or fraudulent.</li>
+<li><strong>Statistics:</strong> the <code>matched</code>/<code>excluded</code> gap is the estimand; small-sample noise at large <code>τ</code>
+  (few excluded alloys remain) is visible in the <code>delta_sd</code> fields and is reported, not hidden.</li>
+</ul>
+<h2>AI-use disclosure (transparency)</h2>
+<p>This project was <strong>AI-assisted</strong>: drafting, code scaffolding and analysis support were
+machine-generated. The research design, the claims, the honesty framing, and responsibility for
+correctness are <strong>human</strong>. No result was fabricated; every number traces to <code>out/*.json</code>, which
+<code>reproduce.py</code> regenerates from raw data.</p>
+<h2>Data source &amp; attribution</h2>
+<blockquote>
+<p>M. Af screw et al., <em>High Entropy Alloys</em>, Materials for Design Open Repository,
+Zenodo record 6403257, DOI <a href="https://doi.org/10.5281/zenodo.6403257">10.5281/zenodo.6403257</a>,
+CC-BY-4.0.</p>
+</blockquote>
+<h2>Cite this work</h2>
+<pre><code class="language-bibtex">@misc{hea-leakage-audit,
+  title         = {Near-Duplicate Leakage in ML Prediction of High-Entropy-Alloy Phase Formation},
+  author        = {[YOUR NAME]},
+  year          = {2026},
+  howpublished  = {\url{[REPO URL]}},
+  note          = {CC-BY-4.0 data; MIT code}
+}
+</code></pre>
+<p>A machine-readable <code>CITATION.cff</code> is included; an <code>executive_summary.md</code> one-pager is
+provided for research leads and reviewers.</p>
+<h2>Author &amp; preprint (fill in before publishing)</h2>
+<ul>
+<li><strong>Author:</strong> <YOUR NAME></li>
+<li><strong>Affiliation:</strong> <YOUR SCHOOL / LAB></li>
+<li><strong>Contact:</strong> <YOUR EMAIL></li>
+<li><strong>Preprint:</strong> <arXiv / repository link — add after submission></li>
+<li><strong>Repo:</strong> <GitHub link — add after push></li>
+</ul>
+<hr />
+<p><em>Significance is earned by being reproducible and honest. The repo is the durable asset; the
+attention is a bonus.</em></p></main>
+<footer><div class="f-in">
+  Reproducible research release &middot; Data: Zenodo 6403257 (CC-BY-4.0) &middot; Code: MIT &middot;
+  AI-assisted, human-verified. &middot; <a href="index.html">Overview</a>
+</div></footer>
+</body>
+</html>

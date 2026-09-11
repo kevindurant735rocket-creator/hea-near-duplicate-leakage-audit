@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>reproduce.py — HEA Leakage Audit</title>
+<style>
+:root{--ink:#0f172a;--muted:#475569;--border:#e2e8f0;--primary:#4f46e5;--surface:#f8fafc;--code:#0f172a}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);line-height:1.7;background:#fff}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+.topbar{position:sticky;top:0;background:rgba(255,255,255,.9);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--border);z-index:10}
+.tb-in{max-width:860px;margin:0 auto;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700}
+.brand .m{width:22px;height:22px;border-radius:6px;background:var(--primary);display:inline-block}
+.back{font-size:14px;color:var(--muted)}
+.doc{max-width:860px;margin:0 auto;padding:44px 24px 80px}
+.doc h1{font-size:30px;line-height:1.25;margin:0 0 18px;letter-spacing:-.01em}
+.doc h2{font-size:22px;margin:38px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+.doc h3{font-size:17px;margin:24px 0 8px}
+.doc p,.doc li{color:#1e293b}
+.doc code{background:#f1f5f9;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.9em;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+.doc pre{background:var(--code);color:#e2e8f0;border-radius:12px;padding:18px 20px;overflow:auto}
+.doc pre code{background:none;border:none;color:inherit;padding:0}
+.doc table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+.doc th,.doc td{border:1px solid var(--border);padding:9px 12px;text-align:left}
+.doc th{background:var(--surface)}
+.doc blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--primary);background:var(--surface);color:var(--muted);border-radius:0 10px 10px 0}
+.doc hr{border:none;border-top:1px solid var(--border);margin:34px 0}
+.doc img{max-width:100%}
+.dl{display:inline-block;margin:0 0 16px;font-weight:600}
+footer{border-top:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px}
+footer .f-in{max-width:860px;margin:0 auto;padding:22px 24px}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="tb-in">
+  <a class="brand" href="index.html"><span class="m"></span> HEA Leakage Audit</a>
+  <a class="back" href="index.html">&larr; 返回首页 / Back to overview</a>
+</div></div>
+<main class="doc"><h1>reproduce.py</h1><a class="dl" href="reproduce.py" download>Download reproduce.py &darr;</a><pre><code>&quot;&quot;&quot;
+reproduce.py — one-command reproduction of the HEA near-duplicate leakage audit.
+
+WHAT IT DOES
+------------
+Re-runs EXP-5 (the near-duplicate exclusion-radius sweep) using the *exact* code
+that produced the numbers in the paper, then checks the headline result against
+the committed reference (out/07_exclusion_sweep.json). If the recomputed numbers
+match the reference within tolerance, you have bit-for-bit evidence that the
+claims are reproducible.
+
+Headline claim (hgb / gradient-boosted trees):
+  At exclusion radius tau = 0.35 (mole-fraction L1 space),
+    - training set with near-duplicates removed : bal. acc. = 0.685
+    - size-matched control (duplicates kept)    : bal. acc. = 0.836
+    - pure redundancy gap  delta                = +0.151
+  The total accuracy drop from tau=0 to tau=0.35 (0.883 -&gt; 0.685 = 0.198) splits
+  into ~24 % data-volume and ~76 % near-duplicate redundancy.
+
+USAGE
+-----
+  python reproduce.py
+    -&gt; runs the sweep (~60 s), writes out/repro_rows.csv + out/repro_sweep.json,
+       compares to out/07_exclusion_sweep.json, prints PASS/FAIL, exits 0 on PASS.
+
+DATA
+----
+The raw dataset (Materials for Design Open Repository, Zenodo 6403257,
+file 2022-03-31-HEAs_dataset_v2.xlsx, CC-BY-4.0) must be present at
+../data/heas_v2.xlsx. If it is missing, download it from
+https://doi.org/10.5281/zenodo.6403257 and place it under ../data/, or pass
+--data &lt;path&gt;.
+
+Determinism: all random sources are fixed (HGB random_state=0, KNN/logreg are
+deterministic, the matched subsample uses numpy default_rng(1000+seed), and the
+train/test split uses random_state=seed). The re-run therefore reproduces the
+reference to many decimal places.
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import argparse
+import importlib
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent                       # research/ is the repo root
+CODE = REPO / &quot;code&quot;
+OUT = REPO / &quot;out&quot;
+REF = OUT / &quot;07_exclusion_sweep.json&quot;
+REPRO_ROWS = OUT / &quot;repro_rows.csv&quot;
+REPRO_JSON = OUT / &quot;repro_sweep.json&quot;
+DATA_DEFAULT = REPO / &quot;data&quot; / &quot;heas_v2.xlsx&quot;
+
+# tolerance for &quot;matches the committed reference&quot; (generous; true match is ~1e-12)
+TOL = 0.005
+
+
+def main() -&gt; int:
+    ap = argparse.ArgumentParser(description=&quot;Reproduce the HEA near-duplicate leakage audit.&quot;)
+    ap.add_argument(&quot;--data&quot;, type=Path, default=DATA_DEFAULT,
+                    help=&quot;path to heas_v2.xlsx (default: ../data/heas_v2.xlsx)&quot;)
+    ap.add_argument(&quot;--no-run&quot;, action=&quot;store_true&quot;,
+                    help=&quot;skip the sweep and only check existing out/repro_sweep.json&quot;)
+    args = ap.parse_args()
+
+    if not args.data.exists():
+        print(f&quot;[reproduce] DATA NOT FOUND: {args.data}&quot;)
+        print(&quot;  Download 2022-03-31-HEAs_dataset_v2.xlsx from https://doi.org/10.5281/zenodo.6403257&quot;)
+        print(&quot;  (CC-BY-4.0) and place it at data/heas_v2.xlsx, then re-run.&quot;)
+        return 2
+
+    # make the verified source module importable and run it with redirected output
+    if str(CODE) not in sys.path:
+        sys.path.insert(0, str(CODE))
+
+    if not args.no_run:
+        if not REF.exists():
+            print(f&quot;[reproduce] REFERENCE NOT FOUND: {REF}&quot;)
+            print(&quot;  The committed reference out/07_exclusion_sweep.json is missing.&quot;)
+            return 2
+        sweep7 = importlib.import_module(&quot;07_exclusion_sweep&quot;)
+        # redirect outputs so we never clobber the committed reference
+        sweep7.ROWS_CSV = REPRO_ROWS
+        sweep7.RES_JSON = REPRO_JSON
+        print(&quot;[reproduce] running EXP-5 exclusion-radius sweep (~60 s) ...&quot;)
+        sweep7.run()
+        sweep7.merge()
+        print(f&quot;[reproduce] wrote {REPRO_ROWS.name} and {REPRO_JSON.name}&quot;)
+
+    if not REPRO_JSON.exists():
+        print(f&quot;[reproduce] {REPRO_JSON.name} missing — run without --no-run first.&quot;)
+        return 2
+
+    repro = json.loads(REPRO_JSON.read_text(encoding=&quot;utf-8&quot;))
+    ref = json.loads(REF.read_text(encoding=&quot;utf-8&quot;))
+
+    print(&quot;\n=== HEADLINE CHECK (hgb / gradient-boosted trees) ===&quot;)
+    def rec(block, model, tau):
+        for r in block[model]:
+            if abs(r[&quot;tau&quot;] - tau) &lt; 1e-9:
+                return r
+        raise KeyError(f&quot;{model}@{tau}&quot;)
+
+    ok = True
+    for model in (&quot;hgb&quot;, &quot;knn&quot;, &quot;logreg&quot;):
+        r_ref = rec(ref[&quot;by_model&quot;], model, 0.35)
+        r_rep = rec(repro[&quot;by_model&quot;], model, 0.35)
+        d_ref = r_ref[&quot;delta&quot;]
+        d_rep = r_rep[&quot;delta&quot;]
+        dev = abs(d_rep - d_ref)
+        flag = &quot;ok&quot; if dev &lt;= TOL else &quot;FAIL&quot;
+        if dev &gt; TOL:
+            ok = False
+        print(f&quot;  {model:7s} tau=0.35  ref delta={d_ref:+.4f}  repro delta={d_rep:+.4f}  &quot;
+              f&quot;dev={dev:.2e}  [{flag}]&quot;)
+
+    # self-check: tau=0 must give delta == 0 (definitions coincide)
+    for model in (&quot;hgb&quot;, &quot;knn&quot;, &quot;logreg&quot;):
+        d0 = rec(repro[&quot;by_model&quot;], model, 0.0)[&quot;delta&quot;]
+        if abs(d0) &gt; 1e-9:
+            ok = False
+            print(f&quot;  {model:7s} tau=0 self-check FAILED (delta={d0:+.4f}, expected 0)&quot;)
+        else:
+            print(f&quot;  {model:7s} tau=0 self-check ok (delta=0)&quot;)
+
+    # redundancy decomposition (from the recomputed numbers)
+    hgb0 = rec(repro[&quot;by_model&quot;], &quot;hgb&quot;, 0.0)[&quot;bal_acc_excluded&quot;]
+    hgb35 = rec(repro[&quot;by_model&quot;], &quot;hgb&quot;, 0.35)
+    total_drop = hgb0 - hgb35[&quot;bal_acc_excluded&quot;]
+    volume = abs(hgb35[&quot;bal_acc_matched&quot;] - rec(repro[&quot;by_model&quot;], &quot;hgb&quot;, 0.0)[&quot;bal_acc_matched&quot;])
+    redundancy = hgb35[&quot;delta&quot;]
+    print(&quot;\n=== REDUNDANCY DECOMPOSITION (hgb, tau 0 -&gt; 0.35) ===&quot;)
+    print(f&quot;  total drop          = {total_drop:.3f}&quot;)
+    print(f&quot;  volume effect       = {volume:.3f}  ({volume/total_drop*100:.0f}%)&quot;)
+    print(f&quot;  redundancy effect   = {redundancy:.3f}  ({redundancy/total_drop*100:.0f}%)&quot;)
+
+    print(&quot;\n=== RESULT ===&quot;)
+    if ok:
+        print(&quot;  PASS — recomputed headline matches the committed reference within &quot;
+              f&quot;tolerance {TOL}.&quot;)
+        return 0
+    print(&quot;  FAIL — recomputed numbers deviate beyond tolerance. Investigate.&quot;)
+    return 1
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</code></pre></main>
+<footer><div class="f-in">
+  Reproducible research release &middot; Data: Zenodo 6403257 (CC-BY-4.0) &middot; Code: MIT &middot;
+  AI-assisted, human-verified. &middot; <a href="index.html">Overview</a>
+</div></footer>
+</body>
+</html>
