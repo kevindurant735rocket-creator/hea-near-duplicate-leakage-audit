@@ -210,3 +210,30 @@ Read this before quoting +0.151.
   design, the claims, and responsibility for correctness are human. No result was
   fabricated — every number traces to `out/*.json`, which `reproduce.py` regenerates from
   the raw data.
+
+## Verified reproduction
+
+Run on macOS, Python 3.13, 2026-09-30:
+
+```
+$ pip install -r public-release/requirements.txt
+$ python public-release/reproduce.py          # 60.75 s
+
+=== HEADLINE CHECK (hgb / gradient-boosted trees) ===
+  hgb     tau=0.35  ref delta=+0.1510  repro delta=+0.1510  dev=0.00e+00  [ok]
+  knn     tau=0.35  ref delta=+0.1340  repro delta=+0.1340  dev=0.00e+00  [ok]
+  logreg  tau=0.35  ref delta=+0.0322  repro delta=+0.0322  dev=0.00e+00  [ok]
+
+=== REDUNDANCY DECOMPOSITION (hgb, tau 0 -> 0.35) ===
+  total drop          = 0.198
+  volume effect       = 0.047  (24%)
+  redundancy effect   = 0.151  (76%)
+
+=== RESULT ===
+  PASS — recomputed headline matches the committed reference within tolerance 0.005.
+```
+
+`dev` is the deviation between the recomputed delta and the committed one, and
+it is `0.00e+00` on all three models, not merely inside the tolerance. If your
+re-run does not print that, something in the environment differs — the seed is
+fixed, so a non-zero deviation is a real signal and worth reporting.
