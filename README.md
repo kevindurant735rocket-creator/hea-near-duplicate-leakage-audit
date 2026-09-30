@@ -138,7 +138,7 @@ To re-run the full study rather than just the headline sweep, work through
 
 ```
 code/            analysis, figures, reports (00..09 + hea_common.py)
-data/            raw workbook (CC-BY-4.0) + derived tables
+data/            raw workbook (MIT) + derived tables
 out/             result JSON/CSV — single source of truth for every number
 figures/         300 dpi figures
 paper/           paper_EN / paper_CN (.md, .tex, .pdf)
@@ -203,7 +203,7 @@ Read this before quoting +0.151.
 ## Data, license, disclosure
 
 - **Data:** *Materials for Design Open Repository, High Entropy Alloys*, Zenodo
-  [10.5281/zenodo.6403257](https://doi.org/10.5281/zenodo.6403257), CC-BY-4.0. The raw
+  [10.5281/zenodo.6403257](https://doi.org/10.5281/zenodo.6403257), MIT. The raw
   workbook is included unmodified.
 - **Code:** MIT — see [`LICENSE`](LICENSE).
 - **AI-use disclosure:** AI-assisted (drafting, code scaffolding, analysis support). The
